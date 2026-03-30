@@ -1,0 +1,46 @@
+{
+    "name": "super-kernel/support",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "php",
+        "swoole",
+        "super-kernel",
+        "support"
+    ],
+    "homepage": "https://github.com/super-kernel/support",
+    "support": {
+        "issues": "https://github.com/super-kernel/support/issues",
+        "source": "https://github.com/super-kernel/support"
+    },
+    "autoload": {
+        "psr-4": {
+            "SuperKernel\\Support\\": "src/"
+        },
+        "files": [
+            "src/Functions.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SuperKernelTest\\Support\\": "tests/"
+        }
+    },
+    "config": {
+        "classmap-authoritative": true,
+        "optimize-autoloader": true,
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "require": {
+        "php": "~8.4.0",
+        "super-kernel/context": "~1.0.0"
+    },
+    "require-dev": {
+        "super-kernel/bootstrap": "~1.0.0",
+        "super-kernel/di": "~1.0.1",
+        "super-kernel/event-dispatcher": "~1.0.0",
+        "super-kernel/framework": "~1.0.0"
+    }
+}
