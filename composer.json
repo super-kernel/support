@@ -1,0 +1,36 @@
+{
+    "name": "super-kernel/support",
+    "description": "Dependency-free namespaced helpers for caller-owned short-lived SuperKernel instances.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.4.27 <8.5"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.95.27",
+        "phpunit/phpunit": "^13.4.3",
+        "super-kernel/context": "dev-main",
+        "super-kernel/contract": "dev-main",
+        "super-kernel/di": "dev-main"
+    },
+    "suggest": {
+        "super-kernel/context": "Provides the current application container for container-assisted construction."
+    },
+    "autoload": {
+        "files": [
+            "src/functions.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SuperKernel\\Support\\Tests\\": "tests/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "scripts": {
+        "format": "@php vendor/bin/php-cs-fixer fix --show-progress=bar --no-ansi",
+        "format:check": "@php vendor/bin/php-cs-fixer check --show-progress=bar --no-ansi --diff",
+        "test": "@php vendor/bin/phpunit"
+    }
+}
