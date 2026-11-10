@@ -9,9 +9,9 @@
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.95.27",
         "phpunit/phpunit": "^13.4.5",
-        "super-kernel/context": "dev-main",
-        "super-kernel/contract": "dev-main",
-        "super-kernel/di": "dev-main"
+        "super-kernel/context": "self.version",
+        "super-kernel/contract": "self.version",
+        "super-kernel/di": "self.version"
     },
     "suggest": {
         "super-kernel/context": "Provides the current application container for container-assisted construction."
