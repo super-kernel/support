@@ -4,90 +4,127 @@
 
 # SuperKernel Support
 
-`super-kernel/support` 提供带命名空间的便捷函数，除 PHP 外没有其他生产依赖。它可以独立构造对象，也可以通过可选的 Context 集成使用当前的应用容器。
+`super-kernel/support` 提供 `make()` 函数，它创建一个由调用方持有的新对象，并从应用容器中填充其构造函数的依赖。
 
-## 调用方持有的构造
+## 安装
 
-```php
-use App\Service\Report;
-
-use function SuperKernel\Support\make;
-
-$report = make(Report::class, ['format' => 'json']);
+```bash
+composer require super-kernel/support
 ```
 
-每次调用都直接用 `new` 创建一个新的顶层对象。这个实例既不从容器中获取，也不保留在容器中，其生命周期由调用方持有。由容器提供的依赖遵循该容器的生命周期，可能是共享的。不提供瞬态依赖图作用域、属性注入、目标类的 Provider/FactoryProvider 分派、生命周期钩子或子容器。借助容器的调用每次都会重新反射构造函数；Support 不维护反射缓存。
+本包除 PHP 外没有其他要求。要从容器填充依赖，请安装提供应用容器的 `super-kernel/context`；没有它时，`make()` 只用给定的参数进行构造。
 
-原生签名是 `make(string $className, array $parameters = []): mixed`。其泛型 PHPDoc 返回类型为 `($className is class-string<TClass> ? TClass : mixed)`，对已知的类名字符串保留具体类型。调用成功时返回一个对象；没有表示失败的哨兵值。
+## 提供的能力
 
-## 借助容器的构造
+- `make($class, $parameters)`，每次调用都返回一个新实例。
+- 按名称或位置给出的构造函数参数，其余参数按类型从容器填充，然后取默认值和 `null`。
+- 与 `super-kernel/di` 相同的参数规则，适用于 `super-kernel/context` 持有的任何 PSR-11 容器。
+- 对无法填充的参数、有歧义的类型以及引用传递的参数给出明确的错误。
 
-当 `ApplicationContext` 可用时，`make()` 会取得其当前的 PSR 容器。官方 DI 和第三方容器使用同一套参数选择逻辑，只调用 `has()` 和 `get()`，不需要 DI 解析器服务。依赖必须能按其类或接口的完全限定名查询到。只注册为 `mailer` 的服务无法被推断为实现了 `MailerInterface`；请注册接口标识，或显式传入该值。Support 既不枚举服务，也不会自行构造缺失的依赖。
+它不会：
 
-例如，应用创建了一个第三方 PSR 容器，其中有 `App\Store::class` 条目：
+- 把创建的对象保存在容器中，或者返回容器条目；
+- 对创建的对象应用 `#[Provider]` 或 `#[FactoryProvider]` 映射、属性注入或生命周期钩子；
+- 创建作用域或依赖的新副本：来自容器的依赖仍然是共享的。
+
+## 快速开始
+
+一个由容器提供的服务。将它保存为 `src/Report/Formatter.php`：
 
 ```php
 <?php
 
 declare(strict_types=1);
 
-namespace App;
+namespace Src\Report;
 
-use Psr\Container\ContainerInterface;
-use SuperKernel\Context\ApplicationContext;
+use function strtoupper;
+
+final class Formatter
+{
+    public function format(string $format, string $title): string
+    {
+        return strtoupper($format) . ': ' . $title;
+    }
+}
+```
+
+一个由调用方持有的对象，带有一个依赖和一个设置。将它保存为 `src/Report/Report.php`：
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace Src\Report;
+
+final readonly class Report
+{
+    public function __construct(public Formatter $formatter, public string $format = 'text')
+    {
+    }
+
+    public function render(string $title): string
+    {
+        return $this->formatter->format($this->format, $title);
+    }
+}
+```
+
+在由 `super-kernel/skeleton` 创建的应用中，创建两份报告。将脚本保存为 `bin/report.php`：
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Src\Report\Report;
 
 use function SuperKernel\Support\make;
 
-interface Store
-{
-    public function save(string $value): void;
-}
+require dirname(__DIR__) . '/vendor/autoload.php';
 
-final readonly class Job
-{
-    public function __construct(public Store $store, public string $label = 'default')
-    {
-    }
-}
+$json = make(Report::class, ['format' => 'json']);
+$text = make(Report::class);
 
-/** @var ContainerInterface $container The application's configured third-party container. */
-ApplicationContext::setContainer($container);
-$first = make(Job::class, ['label' => 'first']);
-$second = make(Job::class, ['label' => 'second']);
-// $first !== $second; Store comes from the container and can be shared.
+echo $json->render('Sales'), PHP_EOL;
+echo $text->render('Sales'), PHP_EOL;
+var_dump($json === $text, $json->formatter === $text->formatter);
 ```
 
-应用在设置 Context 之前，按该容器实现自己的 API 完成第三方容器的启动。Support 不会附带任何容器实现，也不要求安装 DI 或 Contract。
+构建项目并运行脚本：
 
-### 参数选择
+```bash
+skernel build
+php bin/report.php
+```
 
-Context 可用时，`make()` 沿用 DI 的构造函数参数选择规则：
-
-1. 没有构造函数时得到空参数列表，无论传入了什么覆盖值。
-2. 跳过可变参数，包括引用可变参数和显式传入的可变参数值。非可变的引用参数会在读取覆盖值之前失败。
-3. 对其余每个参数，按名称的覆盖值优先于其反射位置上的覆盖值。`array_key_exists()` 会把显式的 `null` 视为已传入；构造对象时由 PHP 校验该值。
-4. 具名的非内置类型成为候选服务标识，包括类名、接口名和枚举名。`self` 使用所请求的类；`parent` 使用其直接父类（如有）。对于继承来的构造函数，它们相对于所请求的类，而不是声明该构造函数的类。
-5. 联合类型只贡献其中具名的非内置分支，按反射顺序排列并去除重复标识。交叉类型不贡献候选。`(A&B)|C` 这样的 DNF 类型只考虑 `C`；需要时请显式传入交叉类型的值。内置类型（包括 `object`）不会查询类型名或参数名标识。
-6. 按顺序用 `has()` 检查所有候选标识。恰好有一个可用候选时，用 `get()` 取得它。存在多个可用候选时，会在调用任何 `get()` 之前失败，即使这些条目包含的是同一个对象。默认值和可空类型不能消除歧义。
-7. 一个候选都没有时，使用声明的默认值；若声明的类型允许，再使用 `null`；否则失败。必需的 `mixed` 参数允许 `null`；没有类型声明的必需参数不享受这一回退。
-8. 多余的位置值和未知的命名键会被忽略。只有解析出的固定参数会传给构造函数。
-
-例如，构造 `Child::class` 时，继承来的 `self` 参数查询 `Child::class`；继承来的 `parent` 参数查询 `Child` 的直接父类。这些标识规则不会改变 PHP 自身的参数类型检查。
-
-### 错误
-
-参数无法解析、候选有歧义，以及不受支持的非可变引用参数，Support 都会抛出 PHP 的 `InvalidArgumentException`。消息会指明类和参数：
+它会打印：
 
 ```text
-Unable to resolve constructor parameter App\Job::__construct($store) of type App\Store.
-Ambiguous constructor parameter App\Job::__construct($store): App\PrimaryStore, App\BackupStore.
-Constructor parameter App\Job::__construct($value) cannot be resolved because references are unsupported.
+JSON: Sales
+TEXT: Sales
+bool(false)
+bool(true)
 ```
 
-参数没有类型声明时，无法解析的消息会省略 `of type ...`。反射错误、Context 错误、容器 `has()` / `get()` 的错误以及目标构造函数的错误都会原样传播。查找失败时从不回退到默认值、`null`、其他候选或原生构造。返回值不兼容和目标无效仍是 PHP 错误。Context 存在时，调用方必须提供可构造的类、有效的参数和可用的容器。
+## 公开接口
 
-## 独立使用
+| 名称 | 类别 | 用途 |
+| --- | --- | --- |
+| `SuperKernel\Support\make` | 辅助函数 | 创建一个类的新实例，用给定的参数和应用容器填充其构造函数。 |
 
-没有 `ApplicationContext` 类时，`make()` 使用原生的 `new $className(...$parameters)`，遵循 PHP 自身的参数绑定规则。单独 require `src/functions.php` 即可加载它；这条路径不需要任何 SuperKernel 包。上面那些容器相关的限制（例如忽略可变参数值和多余的键）不适用于这条路径。
+## 需要了解的行为
 
-安装了 Context 但未设置容器时，由 Context 负责初始化：安装了 DI 时会初始化其默认容器；没有 DI 时抛出 `ContainerNotSetException`。使用第三方容器时，请先调用 `setContainer()`。Support 不会捕获 Context 的失败，也不会在没有容器的情况下重试。
+- 当某个参数无法填充时（例如 `Unable to resolve constructor parameter Src\Storage\Job::__construct($store) of type Src\Storage\Store.`）、当参数类型中有多个类或接口在容器中存在条目时，以及对于引用传递的参数，`make()` 抛出 `InvalidArgumentException`。
+- 依赖只按参数类型中某个类或接口的完全限定名查找。以其他名称（例如 `mailer`）注册的容器条目不会被使用。
+- 容器、`super-kernel/context` 和构造函数抛出的异常会原样传出。
+- 安装了 `super-kernel/context` 但没有设置容器时，`make()` 让上下文从构建元数据创建默认容器，这需要 `super-kernel/di` 和 `skernel build`；要使用其他容器，请先设置你自己的容器。
+
+## 文档
+
+开发者文档用完整示例介绍参数规则、其他容器、不依赖 SuperKernel 的用法以及各种错误：[SuperKernel Support](https://github.com/super-kernel/.github/blob/main/docs/components/support.zh-CN.md)。
+
+## 许可证
+
+基于 MIT 许可证发布，详见 [LICENSE](LICENSE)。
