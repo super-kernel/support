@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace SuperKernel\Support;
 
 use InvalidArgumentException;
+use Psr\Container\NotFoundExceptionInterface;
 use ReflectionClass;
 use ReflectionNamedType;
 use ReflectionUnionType;
 use SuperKernel\Context\ApplicationContext;
+use Throwable;
 
 use function array_key_exists;
 use function array_unique;
@@ -20,7 +22,8 @@ use function sprintf;
 /**
  * Creates a caller-owned short-lived instance with optional container-assisted construction.
  * The caller supplies a constructible class, valid arguments, and a working optional application container.
- * Context, reflection, container, and target-constructor failures propagate unchanged.
+ * Context, reflection, container, and target-constructor failures propagate unchanged. When a required parameter stays
+ * unresolved, the first container get() failure other than not-found among its candidates is the previous exception.
  *
  * @template TClass of object
  *
@@ -123,12 +126,27 @@ function make(string $className, array $parameters = []): mixed
             continue;
         }
 
+        // has() may report a failed lookup, such as a type that fails to load, as false; get() raises it, so the
+        // first failure other than not-found becomes the cause of the unresolved parameter.
+        $lookupFailure = null;
+
+        foreach (array_unique($candidates) as $candidate) {
+            try {
+                $container->get($candidate);
+            } catch (NotFoundExceptionInterface) {
+                continue;
+            } catch (Throwable $throwable) {
+                $lookupFailure = $throwable;
+                break;
+            }
+        }
+
         throw new InvalidArgumentException(sprintf(
             'Unable to resolve constructor parameter %s::__construct($%s)%s.',
             $class->getName(),
             $parameter->getName(),
             null === $type ? '' : sprintf(' of type %s', $type),
-        ));
+        ), 0, $lookupFailure);
     }
 
     return new $className(...$arguments);

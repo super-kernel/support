@@ -7,23 +7,34 @@ namespace SuperKernel\Support\Tests\Unit;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerExceptionInterface;
 use ReflectionException;
 use RuntimeException;
+use SuperKernel\Annotator\AnnotationCollector;
+use SuperKernel\Annotator\Model\AttributeMetadata;
+use SuperKernel\Annotator\Model\PackageAnnotations;
+use SuperKernel\Attribute\Definer;
 use SuperKernel\Context\ApplicationContext;
+use SuperKernel\Di\Container;
+use SuperKernel\Di\Definer\ClassDefiner;
 use SuperKernel\Support\Tests\Fixture\AlternateDependencyInterface;
 use SuperKernel\Support\Tests\Fixture\DefaultedService;
 use SuperKernel\Support\Tests\Fixture\DefaultedUnionService;
 use SuperKernel\Support\Tests\Fixture\Dependency;
 use SuperKernel\Support\Tests\Fixture\DependencyInterface;
 use SuperKernel\Support\Tests\Fixture\InterfaceService;
+use SuperKernel\Support\Tests\Fixture\NullableService;
 use SuperKernel\Support\Tests\Fixture\RecordingContainer;
 use SuperKernel\Support\Tests\Fixture\ReferenceService;
 use SuperKernel\Support\Tests\Fixture\ThrowingService;
 use SuperKernel\Support\Tests\Fixture\UnionService;
+use SuperKernel\Support\Tests\Fixture\UnloadableDependency;
+use SuperKernel\Support\Tests\Fixture\UnloadableDependencyService;
 use SuperKernel\Support\Tests\Fixture\UnresolvableService;
 use SuperKernel\Support\Tests\Fixture\UntypedService;
 use Throwable;
 
+use function class_exists;
 use function spl_autoload_register;
 use function spl_autoload_unregister;
 use function SuperKernel\Support\make;
@@ -137,6 +148,104 @@ final class MakeTest extends TestCase
             return;
         }
         self::fail('The lookup failure must propagate.');
+    }
+
+    public function testKeepsTheLoadFailureOfAParameterTypeAsTheCause(): void
+    {
+        self::assertFalse(class_exists(UnloadableDependency::class, false));
+
+        $failure = new RuntimeException('aspect weaving failure');
+        $loader = static function (string $class) use ($failure): void {
+            if (UnloadableDependency::class === $class) {
+                throw $failure;
+            }
+        };
+        ApplicationContext::setContainer(new Container(new AnnotationCollector([
+            new PackageAnnotations('super-kernel/di', null, [
+                ClassDefiner::class => [
+                    new AttributeMetadata(new Definer()),
+                ],
+            ], [], []),
+        ])));
+        spl_autoload_register($loader, true, true);
+
+        try {
+            make(UnloadableDependencyService::class);
+            self::fail('The parameter must stay unresolved.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame(
+                'Unable to resolve constructor parameter ' . UnloadableDependencyService::class
+                . '::__construct($dependency) of type ' . UnloadableDependency::class . '.',
+                $exception->getMessage(),
+            );
+            self::assertInstanceOf(ContainerExceptionInterface::class, $exception->getPrevious());
+            self::assertSame($failure, $exception->getPrevious()->getPrevious());
+        } finally {
+            spl_autoload_unregister($loader);
+        }
+    }
+
+    public function testKeepsTheFirstGetFailureOfUnavailableCandidatesAsTheCause(): void
+    {
+        $failure = new RuntimeException('lookup failed');
+        $container = new RecordingContainer(getFailure: $failure);
+        ApplicationContext::setContainer($container);
+
+        try {
+            make(UnionService::class);
+            self::fail('The parameter must stay unresolved.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertStringStartsWith(
+                'Unable to resolve constructor parameter ' . UnionService::class . '::__construct($dependency)',
+                $exception->getMessage(),
+            );
+            self::assertSame($failure, $exception->getPrevious());
+            self::assertSame([
+                [
+                    'has',
+                    DependencyInterface::class,
+                ],
+                [
+                    'has',
+                    AlternateDependencyInterface::class,
+                ],
+                [
+                    'get',
+                    DependencyInterface::class,
+                ],
+            ], $container->calls);
+        }
+    }
+
+    public function testAMissingEntryIsNoCause(): void
+    {
+        ApplicationContext::setContainer(new RecordingContainer());
+
+        try {
+            make(InterfaceService::class);
+            self::fail('The parameter must stay unresolved.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertNull($exception->getPrevious());
+        }
+    }
+
+    public function testDefaultsAndNullsDoNotLookForACause(): void
+    {
+        $container = new RecordingContainer(getFailure: new RuntimeException('lookup failed'));
+        ApplicationContext::setContainer($container);
+
+        self::assertNull(make(NullableService::class)->dependency);
+        self::assertNull(make(DefaultedService::class)->dependency);
+        self::assertSame([
+            [
+                'has',
+                Dependency::class,
+            ],
+            [
+                'has',
+                Dependency::class,
+            ],
+        ], $container->calls);
     }
 
     public function testTargetConstructorFailureKeepsItsIdentity(): void

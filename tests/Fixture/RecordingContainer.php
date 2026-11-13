@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace SuperKernel\Support\Tests\Fixture;
 
-use LogicException;
 use Psr\Container\ContainerInterface;
 use Throwable;
 
@@ -35,7 +34,7 @@ class RecordingContainer implements ContainerInterface
             throw $this->getFailure;
         }
         if (!array_key_exists($id, $this->entries)) {
-            throw new LogicException('Unexpected container lookup: ' . $id);
+            throw new MissingEntryException('Unexpected container lookup: ' . $id);
         }
         return $this->entries[$id];
     }

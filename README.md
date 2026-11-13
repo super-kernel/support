@@ -118,7 +118,7 @@ bool(true)
 
 - `make()` raises `InvalidArgumentException` when a parameter cannot be filled, such as `Unable to resolve constructor parameter Src\Storage\Job::__construct($store) of type Src\Storage\Store.`, when more than one class or interface in a parameter's type has a container entry, and for a by-reference parameter.
 - A dependency is found only under the fully qualified name of a class or interface in the parameter's type. A container entry registered under another name, such as `mailer`, is not used.
-- Exceptions of the container, of `super-kernel/context`, and of the constructor pass through unchanged.
+- Exceptions of the container, of `super-kernel/context`, and of the constructor pass through unchanged. When a parameter cannot be filled, the first failure of the container's `get()` for one of its types other than not found, such as a class that fails to load, is the previous exception of the `InvalidArgumentException`.
 - With `super-kernel/context` installed but no container set, `make()` lets the context create the default container from the build metadata, which needs `super-kernel/di` and `skernel build`; set your own container first to use another one.
 
 ## Documentation

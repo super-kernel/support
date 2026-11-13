@@ -295,6 +295,10 @@ final class ConstructorArgumentsTest extends TestCase
                     'has',
                     $interface,
                 ],
+                [
+                    'get',
+                    $interface,
+                ],
             ],
             InvalidArgumentException::class,
         ];
@@ -405,7 +409,17 @@ final class ConstructorArgumentsTest extends TestCase
             [],
             [],
             [],
-            $unionHas,
+            [
+                ...$unionHas,
+                [
+                    'get',
+                    $interface,
+                ],
+                [
+                    'get',
+                    $alternate,
+                ],
+            ],
             InvalidArgumentException::class,
         ];
         yield 'same object still ambiguous' => [
@@ -560,6 +574,10 @@ final class ConstructorArgumentsTest extends TestCase
             [
                 [
                     'has',
+                    stdClass::class,
+                ],
+                [
+                    'get',
                     stdClass::class,
                 ],
             ],
