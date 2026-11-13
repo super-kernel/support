@@ -118,7 +118,7 @@ bool(true)
 
 - 当某个参数无法填充时（例如 `Unable to resolve constructor parameter Src\Storage\Job::__construct($store) of type Src\Storage\Store.`）、当参数类型中有多个类或接口在容器中存在条目时，以及对于引用传递的参数，`make()` 抛出 `InvalidArgumentException`。
 - 依赖只按参数类型中某个类或接口的完全限定名查找。以其他名称（例如 `mailer`）注册的容器条目不会被使用。
-- 容器、`super-kernel/context` 和构造函数抛出的异常会原样传出。
+- 容器、`super-kernel/context` 和构造函数抛出的异常会原样传出。参数无法填充时，容器对其某个类型的 `get()` 第一个不是“未找到”的失败（例如某个类加载失败）是该 `InvalidArgumentException` 的前一个异常。
 - 安装了 `super-kernel/context` 但没有设置容器时，`make()` 让上下文从构建元数据创建默认容器，这需要 `super-kernel/di` 和 `skernel build`；要使用其他容器，请先设置你自己的容器。
 
 ## 文档
